@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学生采样终端 - 灵感织网</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/convex@1.11.0/dist/browser.bundle.js"></script>
+    <style>
+        body { font-family: 'Noto Sans SC', sans-serif; background: #020617; color: #f8fafc; }
+        .cyber-card { background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(12px); border: 1px solid rgba(56, 189, 248, 0.2); }
+        .word-btn { transition: all 0.2s; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; }
+        .word-btn:active { transform: scale(0.95); }
+    </style>
+</head>
+<body class="p-4 md:p-8 min-h-screen flex items-center justify-center">
+    <div id="app" class="w-full max-w-lg">
+        <div v-if="!isAuth" class="cyber-card p-8 rounded-3xl text-center shadow-2xl">
+            <h1 class="text-3xl font-bold mb-6 text-sky-400">灵感织网终端</h1>
+            <input v-model="passcode" type="password" placeholder="输入学生密钥 (1234)" 
+                   class="w-full bg-slate-900 border border-slate-700 p-4 rounded-xl mb-4 text-center text-white focus:border-sky-500 outline-none">
+            <button @click="verify" class="w-full bg-sky-600 p-4 rounded-xl font-bold hover:bg-sky-500 transition-colors">验证接入</button>
+        </div>
+
+        <div v-else class="space-y-6">
+            <div class="flex justify-between items-center px-2">
+                <span class="text-sky-500 font-bold flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> 云端已连接 (Convex)
+                </span>
+                <button @click="isAuth = false" class="text-slate-500 text-sm">退出</button>
+            </div>
+            <div class="cyber-card p-8 md:p-10 rounded-3xl text-center">
+                <div class="text-4xl md:text-5xl font-bold mb-10">雪花像 <span class="text-sky-400 border-b-4 border-sky-400 px-4">{{ currentWord || '___' }}</span></div>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-10">
+                    <button v-for="w in wordPool" :key="w" @click="currentWord = w" 
+                            class="word-btn p-4 rounded-xl text-lg font-medium" 
+                            :class="currentWord===w ? 'bg-sky-600 text-white shadow-lg shadow-sky-900/40' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'">
+                        {{w}}
+                    </button>
+                </div>
+                <button @click="submit" :disabled="!currentWord || loading" 
+                        class="w-full py-5 bg-sky-500 rounded-2xl font-bold text-xl disabled:opacity-30 disabled:cursor-not-allowed shadow-xl transition-all">
+                    {{ loading ? '正在注入神经网络...' : '发射语料' }}
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const CONVEX_URL = "https://sensible-sockeye-877.convex.cloud"; // 
+        const client = new Convex.ConvexClient(CONVEX_URL);
+        const { createApp, ref } = Vue;
+
+        createApp({
+            setup() {
+                const isAuth = ref(false);
+                const passcode = ref('');
+                const currentWord = ref('');
+                const loading = ref(false);
+                const wordPool = ['羽毛', '棉絮', '纸片', '精灵', '花瓣', '梨花', '白砂糖', '降落伞', '盐粒', '鹅毛']; // 
+
+                const verify = () => {
+                    if (passcode.value === '1234') isAuth.value = true;
+                    else alert('密钥错误');
+                };
+
+                const submit = async () => {
+                    loading.value = true;
+                    try {
+                        // 调用后端 words:send 变迁 
+                        await client.mutation("words:send", { 
+                            word: currentWord.value, 
+                            time: new Date().toLocaleTimeString() 
+                        });
+                        currentWord.value = '';
+                        alert('✅ 灵感已送达教师端！');
+                    } catch (e) {
+                        alert('提交失败，请检查网络');
+                    } finally { loading.value = false; }
+                };
+
+                return { isAuth, passcode, verify, wordPool, currentWord, submit, loading };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

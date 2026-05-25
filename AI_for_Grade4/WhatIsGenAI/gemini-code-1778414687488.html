@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学生端 - 灵感捕捉</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/convex@1.11.0/dist/browser.bundle.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&display=swap');
+        body { font-family: 'Noto Sans SC', sans-serif; background: #020617; color: #f8fafc; overflow-x: hidden; }
+        
+        /* 玻璃拟态卡片 */
+        .cyber-card { 
+            background: rgba(15, 23, 42, 0.6); 
+            backdrop-filter: blur(12px); 
+            border: 1px solid rgba(56, 189, 248, 0.2); 
+        }
+
+        /* 散落词语按钮样式 */
+        .word-pill { 
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+            border: 1px solid rgba(255,255,255,0.1);
+            cursor: pointer;
+            user-select: none;
+        }
+        .word-pill:hover { transform: translateY(-3px); border-color: #38bdf8; background: rgba(56, 189, 248, 0.1); }
+        .word-pill.active { background: #0ea5e9; color: white; border-color: #7dd3fc; box-shadow: 0 0 20px rgba(14, 165, 233, 0.4); }
+
+        /* 防止 Vue 未加载时显示源码 */
+        [v-cloak] { display: none; }
+
+        .status-dot { width: 8px; height: 8px; background: #22c55e; border-radius: 50%; display: inline-block; box-shadow: 0 0 8px #22c55e; }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+    
+    <div id="app" v-cloak class="w-full max-w-xl">
+        <div class="cyber-card p-8 md:p-12 rounded-[2.5rem] shadow-2xl relative">
+            
+            <div class="absolute top-6 left-8 flex items-center gap-2 text-[10px] text-slate-500 tracking-widest uppercase">
+                <span class="status-dot"></span> 云端同步就绪
+            </div>
+
+            <div class="text-center mt-6">
+                <p class="text-slate-400 text-lg mb-4">请补全句子：</p>
+                
+                <div class="text-4xl md:text-5xl font-bold mb-12 leading-tight">
+                    雪花像 <br class="md:hidden">
+                    <span class="text-sky-400 border-b-4 border-sky-500 px-4 inline-block mt-2">
+                        {{ currentWord || '________' }}
+                    </span>
+                </div>
+
+                <div class="flex flex-wrap justify-center gap-3 mb-12">
+                    <div v-for="word in wordPool" 
+                         :key="word" 
+                         @click="currentWord = word"
+                         :class="['word-pill px-5 py-2.5 rounded-2xl text-lg font-medium bg-slate-800/50', currentWord === word ? 'active' : 'text-slate-300']">
+                        {{ word }}
+                    </div>
+                </div>
+
+                <button @click="sendToCloud" 
+                        :disabled="!currentWord || loading" 
+                        class="w-full py-5 bg-sky-600 hover:bg-sky-500 disabled:bg-slate-700 disabled:opacity-40 rounded-2xl font-bold text-xl transition-all shadow-lg shadow-sky-900/20 active:scale-[0.98]">
+                    {{ loading ? '同步中...' : '发射我的灵感' }}
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref } = Vue;
+        
+        // 请确保此 URL 对应您的 Convex 后端
+        const CONVEX_URL = "https://sensible-sockeye-877.convex.cloud";
+        const client = new Convex.ConvexClient(CONVEX_URL);
+
+        createApp({
+            setup() {
+                const currentWord = ref('');
+                const loading = ref(false);
+                
+                // 这里定义散落在周围的词
+                const wordPool = ref([
+                    '羽毛', '棉絮', '精灵', '纸片', '花瓣', 
+                    '梨花', '白砂糖', '降落伞', '盐粒', '鹅毛'
+                ]);
+
+                const sendToCloud = async () => {
+                    if (!currentWord.value) return;
+                    loading.value = true;
+                    try {
+                        // 调用 Convex 后端 mutation
+                        await client.mutation("words:send", { 
+                            word: currentWord.value, 
+                            time: new Date().toLocaleTimeString('zh-CN', { hour12: false })
+                        });
+                        alert('✅ 发送成功！');
+                        currentWord.value = ''; 
+                    } catch (e) {
+                        console.error(e);
+                        alert('❌ 连接失败，请检查网络');
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+
+                return { currentWord, wordPool, sendToCloud, loading };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

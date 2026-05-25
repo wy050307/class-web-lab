@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>建立模型 - 专业版</title>
+    <style>
+        :root {
+            --primary-color: #007aff;
+            --bg-color: #f2f2f7;
+            --card-bg: #ffffff;
+            --danger-color: #ff3b30;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
+        body {
+            margin: 0; padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: #1d1d1f;
+            display: flex; justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.08);
+            min-height: 85vh;
+        }
+
+        h1 { text-align: center; font-weight: 600; margin-bottom: 25px; }
+
+        /* ----- 表格输入区域 ----- */
+        .table-container {
+            width: 100%;
+            margin-bottom: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #d2d2d7;
+            border-radius: 12px;
+        }
+
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            background: #f5f5f7; position: sticky; top: 0; z-index: 1;
+            padding: 12px 15px; text-align: left; font-size: 13px; color: #86868b;
+        }
+        td { padding: 8px 15px; border-bottom: 1px solid #f2f2f7; }
+
+        input {
+            width: 100%; padding: 12px; border: 1px solid #d2d2d7;
+            border-radius: 8px; font-size: 16px; outline: none;
+        }
+        input:focus { border-color: var(--primary-color); }
+
+        /* ----- 控制按钮 ----- */
+        .controls {
+            display: flex; flex-wrap: wrap; gap: 10px;
+            justify-content: space-between; align-items: center; margin-bottom: 30px;
+        }
+        .left-btns { display: flex; gap: 10px; }
+        
+        .btn {
+            padding: 12px 20px; border-radius: 10px; font-weight: 500;
+            cursor: pointer; border: none; transition: all 0.2s; font-size: 15px;
+        }
+        .btn-add { background: #e8f2ff; color: var(--primary-color); border: 1px solid #cfe4ff; }
+        .btn-batch { background: var(--primary-color); color: white; }
+        .btn-clear { background: none; border: 1px dashed #999; color: #86868b; font-size: 12px; }
+        .btn-build { 
+            background: #1d1d1f; color: white; width: 100%; 
+            padding: 18px; font-size: 18px; border-radius: 15px; 
+        }
+        .btn:active { transform: scale(0.98); opacity: 0.8; }
+
+        /* ----- 批量弹出层 (Modal) ----- */
+        .modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); z-index: 100; align-items: center; justify-content: center;
+        }
+        .modal-content {
+            background: white; width: 90%; max-width: 500px; padding: 25px;
+            border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+        }
+        .modal-header { font-weight: 600; font-size: 18px; margin-bottom: 15px; }
+        textarea {
+            width: 100%; height: 200px; border: 1px solid #d2d2d7; border-radius: 10px;
+            padding: 12px; font-family: inherit; font-size: 14px; margin-bottom: 15px;
+        }
+        .modal-btns { display: flex; gap: 10px; justify-content: flex-end; }
+
+        /* ----- 转盘视图 ----- */
+        #view-wheel { display: none; flex-direction: column; align-items: center; padding-top: 20px; }
+        .interactive-area {
+            display: flex; flex-direction: column; align-items: center;
+            gap: 40px; margin: 30px 0; width: 100%;
+        }
+        @media (min-width: 768px) { .interactive-area { flex-direction: row; justify-content: space-around; } }
+
+        .wheel-container { position: relative; width: 340px; height: 340px; }
+        .wheel-bg {
+            width: 100%; height: 100%; border-radius: 50%; border: 5px solid #fff;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1); position: relative; overflow: hidden;
+        }
+        .wheel-label {
+            position: absolute; top: 50%; left: 50%; transform-origin: center;
+            font-size: 13px; color: #fff; font-weight: bold; text-shadow: 1px 1px 2px rgba(0,0,0,0.6);
+        }
+        .pointer-wrapper {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            transition: transform 2s cubic-bezier(0.15, 0, 0.15, 1); z-index: 10;
+        }
+        .pointer-arrow {
+            position: absolute; top: -15px; left: 50%; transform: translateX(-50%);
+            width: 0; height: 0; border-left: 18px solid transparent;
+            border-right: 18px solid transparent; border-top: 45px solid var(--danger-color);
+        }
+        .btn-generate {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 80px; height: 80px; border-radius: 50%; background: #fff;
+            border: 4px solid var(--primary-color); color: var(--primary-color);
+            font-weight: bold; z-index: 20; cursor: pointer; font-size: 16px;
+        }
+
+        .result-area { font-size: 32px; text-align: center; }
+        .blank-line {
+            display: inline-block; min-width: 120px; border-bottom: 3px solid #1d1d1f;
+            color: var(--danger-color); font-weight: 700; margin: 0 8px; vertical-align: bottom;
+        }
+        .btn-reset { margin-top: 30px; background: #8e8e93; color: white; border: none; padding: 12px 30px; border-radius: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>建立模型</h1>
+
+    <!-- 输入视图 -->
+    <div id="view-input">
+        <div class="controls">
+            <div class="left-btns">
+                <button class="btn btn-batch" onclick="toggleModal(true)">批量导入数据</button>
+                <button class="btn btn-add" onclick="addRow()">+ 单行添加</button>
+            </div>
+            <button class="btn btn-clear" onclick="clearAll()">清空全部</button>
+        </div>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr><th>词语</th><th>出现次数</th><th style="width: 70px;"></th></tr>
+                </thead>
+                <tbody id="table-body"></tbody>
+            </table>
+        </div>
+
+        <button class="btn-build" onclick="buildModel()">建立模型</button>
+    </div>
+
+    <!-- 转盘视图 -->
+    <div id="view-wheel">
+        <div class="interactive-area">
+            <div class="wheel-container">
+                <div id="wheel-bg" class="wheel-bg"></div>
+                <div id="pointer-wrapper" class="pointer-wrapper">
+                    <div class="pointer-arrow"></div>
+                </div>
+                <button id="btn-generate" class="btn-generate" onclick="generateResult()">生成</button>
+            </div>
+            <div class="result-area">雪花像<span id="result-word" class="blank-line"></span>。</div>
+        </div>
+        <button class="btn-reset" onclick="resetModel()">返回修改数据</button>
+    </div>
+</div>
+
+<!-- 批量添加 Modal -->
+<div id="batch-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">批量粘贴数据</div>
+        <div style="font-size: 12px; color: #86868b; margin-bottom: 10px;">格式：每行一个词语和频次，例如：梨花 15</div>
+        <textarea id="batch-input" placeholder="梨花 15&#10;柳絮 14&#10;盐 3..."></textarea>
+        <div class="modal-btns">
+            <button class="btn" style="background:#f2f2f7;" onclick="toggleModal(false)">取消</button>
+            <button class="btn btn-batch" onclick="processBatch()">确认导入</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let parsedData = [];
+    let currentRotation = 0;
+    const colors = ['#FF6B6B', '#4ECDC4', '#FFD166', '#118AB2', '#073B4C', '#8338EC', '#3498db', '#2ecc71', '#f1c40f', '#e67e22', '#e74c3c', '#9b5de5'];
+
+    window.onload = () => { addRow('梨花', 15); addRow('柳絮', 14); addRow('羽毛', 3); addRow('棉花', 1); addRow('盐', 1);  addRow('绒花', 1);  };
+
+    function addRow(word = '', count = '') {
+        const tbody = document.getElementById('table-body');
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><input type="text" class="in-word" value="${word}" placeholder="词语"></td>
+            <td><input type="number" class="in-count" value="${count}" placeholder="频次"></td>
+            <td><button style="color:red; border:none; background:none; font-size:20px;" onclick="this.parentElement.parentElement.remove()">×</button></td>
+        `;
+        tbody.appendChild(tr);
+        tbody.scrollTop = tbody.scrollHeight;
+    }
+
+    function clearAll() { document.getElementById('table-body').innerHTML = ''; }
+
+    function toggleModal(show) {
+        document.getElementById('batch-modal').style.display = show ? 'flex' : 'none';
+        if(show) document.getElementById('batch-input').value = '';
+    }
+
+    function processBatch() {
+        const input = document.getElementById('batch-input').value.trim();
+        if(!input) return toggleModal(false);
+        
+        const lines = input.split('\n');
+        lines.forEach(line => {
+            const parts = line.trim().split(/\s+/);
+            if(parts.length >= 2) {
+                const w = parts[0];
+                const c = parseFloat(parts[1]);
+                if(w && !isNaN(c)) addRow(w, c);
+            }
+        });
+        toggleModal(false);
+    }
+
+    function buildModel() {
+        const ws = document.querySelectorAll('.in-word');
+        const cs = document.querySelectorAll('.in-count');
+        parsedData = [];
+        let total = 0;
+
+        ws.forEach((el, i) => {
+            const w = el.value.trim();
+            const c = parseFloat(cs[i].value);
+            if(w && !isNaN(c) && c > 0) {
+                parsedData.push({ word: w, count: c });
+                total += c;
+            }
+        });
+
+        if(parsedData.length < 1) return alert('请先输入有效数据');
+
+        parsedData.forEach(item => item.prob = item.count / total);
+        renderWheel();
+        document.getElementById('view-input').style.display = 'none';
+        document.getElementById('view-wheel').style.display = 'flex';
+    }
+
+    function renderWheel() {
+        const bg = document.getElementById('wheel-bg');
+        bg.innerHTML = '';
+        let currentPerc = 0;
+        let stops = [];
+        parsedData.forEach((item, i) => {
+            let start = currentPerc;
+            currentPerc += item.prob * 100;
+            let end = currentPerc;
+            let color = colors[i % colors.length];
+            stops.push(`${color} ${start}% ${end}%`);
+            item.midAngle = ((start + end) / 2) * 3.6;
+            const label = document.createElement('div');
+            label.className = 'wheel-label';
+            label.innerText = item.word;
+            label.style.transform = `translate(-50%, -50%) rotate(${item.midAngle}deg) translateY(-100px)`;
+            bg.appendChild(label);
+        });
+        bg.style.background = `conic-gradient(${stops.join(',')})`;
+    }
+
+    function generateResult() {
+        const btn = document.getElementById('btn-generate');
+        btn.disabled = true;
+        document.getElementById('result-word').innerText = '';
+        let rand = Math.random(), cum = 0, selected = parsedData[0];
+        for (let item of parsedData) {
+            cum += item.prob;
+            if (rand <= cum) { selected = item; break; }
+        }
+        const spins = 1800;
+        const target = currentRotation + spins + (selected.midAngle - (currentRotation % 360));
+        currentRotation = target;
+        document.getElementById('pointer-wrapper').style.transform = `rotate(${target}deg)`;
+        setTimeout(() => {
+            document.getElementById('result-word').innerText = selected.word;
+            btn.disabled = false;
+        }, 2000);
+    }
+
+    function resetModel() {
+        document.getElementById('view-wheel').style.display = 'none';
+        document.getElementById('view-input').style.display = 'flex';
+        document.getElementById('pointer-wrapper').style.transform = 'rotate(0deg)';
+        currentRotation = 0;
+    }
+</script>
+</body>
+</html>

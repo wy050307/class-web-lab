@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学生端 - 灵感捕捉</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/convex@1.11.0/dist/browser.bundle.js"></script>
+    <style>
+        body { 
+            background-color: #020617; /* 深蓝色背景 */
+            color: #f8fafc;
+            font-family: sans-serif;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        .card {
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            padding: 2.5rem;
+            border-radius: 2rem;
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        .word-btn {
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 0.75rem 1.25rem;
+            border-radius: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: #cbd5e1;
+        }
+        .word-btn:hover { background: rgba(56, 189, 248, 0.1); border-color: #38bdf8; }
+        .word-btn.active { 
+            background: #0ea5e9; 
+            color: white; 
+            border-color: #7dd3fc;
+            box-shadow: 0 0 15px rgba(14, 165, 233, 0.4);
+        }
+        /* 避免加载闪烁 */
+        [v-cloak] { display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="app" v-cloak>
+        <div class="card">
+            <div class="flex items-center justify-center gap-2 mb-8 text-xs text-slate-500 uppercase tracking-widest">
+                <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                云端同步已就绪
+            </div>
+
+            <div class="mb-10">
+                <p class="text-slate-400 mb-2">点击词语填空：</p>
+                <h1 class="text-4xl font-bold leading-tight">
+                    雪花像 <br>
+                    <span class="text-sky-400 border-b-4 border-sky-500 px-2 mt-2 inline-block">
+                        {{ currentWord || '________' }}
+                    </span>
+                </h1>
+            </div>
+
+            <div class="flex flex-wrap justify-center gap-3 mb-10">
+                <button 
+                    v-for="word in wordPool" 
+                    :key="word"
+                    @click="currentWord = word"
+                    :class="['word-btn', currentWord === word ? 'active' : '']"
+                >
+                    {{ word }}
+                </button>
+            </div>
+
+            <button 
+                @click="submit" 
+                :disabled="!currentWord || loading"
+                class="w-full py-4 bg-sky-600 hover:bg-sky-500 disabled:bg-slate-800 disabled:text-slate-600 rounded-xl font-bold text-lg transition-all active:scale-95"
+            >
+                {{ loading ? '正在发送...' : '发送灵感' }}
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // 错误监控：如果脚本没加载完就报错，给用户提示
+        window.onerror = function(msg) {
+            alert("加载出错: " + msg + "\n请检查网络连接是否正常。");
+        };
+
+        // 确保 Vue 和 Convex 已经加载
+        if (typeof Vue === 'undefined') {
+            document.body.innerHTML = "<div style='color:white;padding:20px;'>错误：Vue 库加载失败，请检查网络。</div>";
+        } else {
+            const { createApp, ref } = Vue;
+            
+            // 您的 Convex 后端地址
+            const CONVEX_URL = "https://sensible-sockeye-877.convex.cloud";
+
+            createApp({
+                setup() {
+                    const currentWord = ref('');
+                    const loading = ref(false);
+                    const wordPool = ref(['羽毛', '棉絮', '精灵', '纸片', '花瓣', '梨花', '白砂糖', '降落伞', '盐粒', '鹅毛']);
+
+                    // 初始化 Convex
+                    let client;
+                    try {
+                        client = new Convex.ConvexClient(CONVEX_URL);
+                    } catch (e) {
+                        console.error("Convex 初始化失败", e);
+                    }
+
+                    const submit = async () => {
+                        if (!currentWord.value) return;
+                        loading.value = true;
+                        try {
+                            await client.mutation("words:send", { 
+                                word: currentWord.value, 
+                                time: new Date().toLocaleTimeString('zh-CN', { hour12: false })
+                            });
+                            alert('✅ 发送成功！');
+                            currentWord.value = ''; 
+                        } catch (e) {
+                            alert('❌ 发送失败，请确认后端服务是否开启。');
+                            console.error(e);
+                        } finally {
+                            loading.value = false;
+                        }
+                    };
+
+                    return { currentWord, wordPool, submit, loading };
+                }
+            }).mount('#app');
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 灵感织网：概率关联实验室</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts-wordcloud@2.1.0/dist/echarts-wordcloud.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&display=swap');
+        body { font-family: 'Noto Sans SC', sans-serif; background: #0f172a; color: #f8fafc; overflow-x: hidden; }
+        .cyber-card { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(148, 163, 184, 0.2); }
+        .word-node { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; }
+        .word-node:hover { transform: scale(1.1); box-shadow: 0 0 20px rgba(56, 189, 248, 0.5); }
+        .glitch { animation: glitch 1s linear infinite; }
+        @keyframes glitch { 0% { transform: translate(0); } 20% { transform: translate(-2px, 2px); } 40% { transform: translate(-2px, -2px); } 60% { transform: translate(2px, 2px); } 80% { transform: translate(2px, -2px); } 100% { transform: translate(0); } }
+    </style>
+</head>
+<body>
+    <div id="app" class="min-h-screen p-4 md:p-8">
+        <!-- 1. 登录验证界面 -->
+        <div v-if="role === 'guest'" class="max-w-md mx-auto mt-20 text-center">
+            <h1 class="text-4xl font-bold mb-8 text-sky-400">灵感织网终端</h1>
+            <div class="cyber-card p-8 rounded-2xl shadow-2xl">
+                <p class="mb-6 text-slate-400">请输入您的身份密钥以连接神经网络</p>
+                <input v-model="passcode" type="password" class="w-full bg-slate-900 border border-slate-700 p-4 rounded-lg mb-6 text-center text-2xl tracking-widest outline-none focus:border-sky-500" placeholder="****">
+                <button @click="verify" class="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold py-3 rounded-lg transition-colors">接入连接</button>
+                <p class="mt-4 text-xs text-slate-500">学生端: 1234 | 教师端: 4096</p>
+            </div>
+        </div>
+
+        <!-- 2. 学生端界面 -->
+        <div v-if="role === 'student'" class="max-w-4xl mx-auto">
+            <header class="flex justify-between items-center mb-8">
+                <span class="text-sky-400 font-bold">● 学生采样终端</span>
+                <button @click="logout" class="text-slate-500 text-sm">退出</button>
+            </header>
+
+            <div class="cyber-card p-10 rounded-3xl text-center mb-8">
+                <h2 class="text-2xl mb-6 text-slate-300">训练语料填充：</h2>
+                <div class="text-4xl md:text-6xl font-bold mb-10 flex flex-wrap justify-center items-center gap-4">
+                    <span>雪花像</span>
+                    <span class="min-w-[160px] border-b-4 border-sky-500 pb-2 text-sky-400 px-4">{{ currentWord || '？' }}</span>
+                </div>
+
+                <div class="grid grid-cols-3 md:grid-cols-4 gap-4 mb-10">
+                    <div v-for="word in wordPool" :key="word" 
+                         @click="currentWord = word"
+                         class="word-node p-4 rounded-xl text-lg"
+                         :class="currentWord === word ? 'bg-sky-600 text-white' : 'bg-slate-800 text-slate-300'">
+                        {{ word }}
+                    </div>
+                </div>
+
+                <div class="flex gap-4">
+                    <button @click="currentWord = ''" class="flex-1 py-4 border border-slate-700 rounded-xl hover:bg-slate-800 transition">清空</button>
+                    <button @click="submitData" class="flex-2 px-12 py-4 bg-sky-600 rounded-xl font-bold hover:bg-sky-500 shadow-lg shadow-sky-900/20 active:scale-95 transition">上传灵感数据</button>
+                </div>
+            </div>
+            
+            <div class="text-center text-slate-500 text-sm">
+                提示：你的每一次选择都会改变老师大屏幕上的“概率神经网络”。
+            </div>
+        </div>
+
+        <!-- 3. 教师端界面 -->
+        <div v-if="role === 'teacher'" class="h-full">
+            <header class="flex justify-between items-center mb-6">
+                <h1 class="text-2xl font-bold text-sky-400">神经中枢：实时概率可视化看板</h1>
+                <div class="flex gap-4">
+                    <button @click="clearDB" class="px-4 py-2 bg-red-900/30 text-red-400 border border-red-800 rounded-lg text-sm">重置神经网络数据</button>
+                    <button @click="logout" class="px-4 py-2 bg-slate-800 rounded-lg text-sm">退出</button>
+                </div>
+            </header>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- 左侧可视化区 -->
+                <div class="lg:col-span-2 flex flex-col gap-6">
+                    <div class="cyber-card p-6 rounded-2xl h-[450px]" id="wordcloud-chart"></div>
+                    <div class="cyber-card p-6 rounded-2xl flex-1">
+                        <h3 class="text-sky-400 mb-4 font-bold">词汇权重排行榜 (Next Token Probability)</h3>
+                        <div class="space-y-4">
+                            <div v-for="(item, index) in topWeights" :key="index" class="flex items-center gap-4">
+                                <span class="w-8 text-slate-500">#{{index+1}}</span>
+                                <span class="w-24 font-bold">{{item.name}}</span>
+                                <div class="flex-1 h-4 bg-slate-800 rounded-full overflow-hidden">
+                                    <div class="h-full bg-sky-500 transition-all duration-1000" :style="{width: item.percent + '%'}"></div>
+                                </div>
+                                <span class="w-16 text-right text-sky-400 font-mono">{{item.percent}}%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右侧流水区 -->
+                <div class="cyber-card p-6 rounded-2xl overflow-y-auto max-h-[800px]">
+                    <h3 class="text-sky-400 mb-4 font-bold italic">原始训练数据流 >></h3>
+                    <div class="space-y-3">
+                        <div v-for="log in dataLogs" :key="log.id" class="p-3 bg-slate-900/50 rounded border-l-2 border-sky-600 text-sm animate-fade-in">
+                            <div class="flex justify-between text-slate-500 text-xs mb-1">
+                                <span>来自：Node_{{log.id.slice(0,4)}}</span>
+                                <span>{{log.time}}</span>
+                            </div>
+                            <div>雪花像 <span class="text-sky-400 font-bold">{{log.word}}</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted, computed, watch } = Vue;
+
+        createApp({
+            setup() {
+                const role = ref('guest');
+                const passcode = ref('');
+                const currentWord = ref('');
+                const dataLogs = ref([]);
+                const wordPool = ['羽毛', '棉絮', '精灵', '纸片', '花瓣', '大象', '臭袜子', '梨花', '糖霜', '降落伞'];
+                let chart = null;
+
+                // 核心逻辑：使用 localStorage 模拟数据库
+                const loadData = () => {
+                    const saved = localStorage.getItem('ai_lab_data');
+                    dataLogs.value = saved ? JSON.parse(saved) : [];
+                };
+
+                const verify = () => {
+                    if (passcode.value === '1234') role.value = 'student';
+                    if (passcode.value === '4096') {
+                        role.value = 'teacher';
+                        setTimeout(initChart, 100);
+                    }
+                };
+
+                const submitData = () => {
+                    if (!currentWord.ref && !currentWord.value) return alert('请先选择一个词！');
+                    const newData = {
+                        id: Math.random().toString(16).slice(2),
+                        word: currentWord.value,
+                        time: new Date().toLocaleTimeString()
+                    };
+                    dataLogs.value.unshift(newData);
+                    localStorage.setItem('ai_lab_data', JSON.stringify(dataLogs.value));
+                    alert('✨ 数据上传成功！已存入云端模型池。');
+                    currentWord.value = '';
+                };
+
+                const topWeights = computed(() => {
+                    if (dataLogs.value.length === 0) return [];
+                    const counts = {};
+                    dataLogs.value.forEach(log => counts[log.word] = (counts[log.word] || 0) + 1);
+                    return Object.entries(counts)
+                        .map(([name, count]) => ({
+                            name,
+                            percent: ((count / dataLogs.value.length) * 100).toFixed(1)
+                        }))
+                        .sort((a, b) => b.percent - a.percent)
+                        .slice(0, 5);
+                });
+
+                const initChart = () => {
+                    const chartDom = document.getElementById('wordcloud-chart');
+                    if (!chartDom) return;
+                    chart = echarts.init(chartDom);
+                    updateChart();
+                    window.addEventListener('storage', () => { // 监听跨页面数据变化
+                        loadData();
+                        updateChart();
+                    });
+                };
+
+                const updateChart = () => {
+                    if (!chart) return;
+                    const counts = {};
+                    dataLogs.value.forEach(log => counts[log.word] = (counts[log.word] || 0) + 1);
+                    const data = Object.entries(counts).map(([name, value]) => ({ name, value }));
+
+                    chart.setOption({
+                        title: { text: 'AI 联想神经元词云', textStyle: { color: '#38bdf8' } },
+                        series: [{
+                            type: 'wordCloud',
+                            shape: 'circle',
+                            gridSize: 8,
+                            sizeRange: [20, 80],
+                            rotationRange: [-45, 90],
+                            textStyle: {
+                                fontFamily: 'sans-serif',
+                                fontWeight: 'bold',
+                                color: () => `rgb(${Math.round(Math.random() * 160 + 95)}, ${Math.round(Math.random() * 160 + 95)}, 255)`
+                            },
+                            data: data.length ? data : [{name: '等待数据...', value: 10}]
+                        }]
+                    });
+                };
+
+                const clearDB = () => {
+                    if(confirm('确定要清除所有学生上传的数据吗？')) {
+                        localStorage.removeItem('ai_lab_data');
+                        dataLogs.value = [];
+                        updateChart();
+                    }
+                };
+
+                const logout = () => {
+                    role.value = 'guest';
+                    passcode.value = '';
+                };
+
+                onMounted(loadData);
+                watch(dataLogs, updateChart, { deep: true });
+
+                return { role, passcode, verify, wordPool, currentWord, submitData, dataLogs, topWeights, clearDB, logout };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

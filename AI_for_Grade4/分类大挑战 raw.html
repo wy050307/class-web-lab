@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>传统 AI vs 生成式 AI 交互学习</title>
+    <style>
+        /* 基础样式复位及2K屏幕优化 (Base Font Size for 2K) */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+        }
+
+        body {
+            background-color: #f4f7f6;
+            color: #333;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* 防止出现滚动条，全屏应用 */
+        }
+
+        /* 顶部标题栏 */
+        .header {
+            text-align: center;
+            padding: 20px 0;
+            background-color: #ffffff;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            z-index: 10;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            color: #2c3e50;
+            letter-spacing: 2px;
+        }
+
+        /* 主工作区 */
+        .workspace {
+            flex: 1;
+            display: flex;
+            justify-content: space-between;
+            align-items: stretch;
+            padding: 30px 50px;
+            gap: 20px;
+            transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* 左右拖拽区域基础样式 */
+        .drop-zone {
+            width: 25%;
+            border: 4px dashed #bdc3c7;
+            border-radius: 20px;
+            background-color: #fff;
+            display: flex;
+            flex-direction: column;
+            transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .drop-zone.traditional {
+            border-color: #3498db;
+            background-color: rgba(52, 152, 219, 0.03);
+        }
+
+        .drop-zone.generative {
+            border-color: #9b59b6;
+            background-color: rgba(155, 89, 182, 0.03);
+        }
+
+        .drop-zone.drag-over {
+            background-color: rgba(0, 0, 0, 0.1);
+            border-style: solid;
+        }
+
+        /* 区域标题突出显示 */
+        .zone-title {
+            text-align: center;
+            padding: 20px;
+            font-size: 32px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.2);
+            margin-bottom: 10px;
+        }
+
+        .traditional .zone-title {
+            background: linear-gradient(135deg, #2980b9, #3498db);
+        }
+
+        .generative .zone-title {
+            background: linear-gradient(135deg, #8e44ad, #9b59b6);
+        }
+
+        /* 放置在区域内的列表容器 */
+        .items-container {
+            flex: 1;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            overflow-y: auto;
+            align-items: center;
+        }
+
+        /* 中间散落区域 */
+        .center-area {
+            width: 45%;
+            position: relative;
+            background-color: rgba(255, 255, 255, 0.5);
+            border-radius: 20px;
+            border: 2px solid #e0e0e0;
+            transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* 拖拽项卡片样式 */
+        .card {
+            width: 240px;
+            padding: 15px 20px;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            font-size: 18px;
+            font-weight: 500;
+            color: #34495e;
+            text-align: center;
+            cursor: grab;
+            user-select: none;
+            transition: transform 0.2s, box-shadow 0.2s, background-color 0.3s;
+            border-left: 6px solid #95a5a6;
+            /* 绝对定位用于中间散落 */
+            position: absolute; 
+            z-index: 5;
+            line-height: 1.4;
+        }
+
+        .card:active {
+            cursor: grabbing;
+            transform: scale(1.05);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+            z-index: 100;
+        }
+
+        /* 拖入容器后的卡片样式 */
+        .items-container .card {
+            position: relative !important; /* 覆盖绝对定位 */
+            left: 0 !important;
+            top: 0 !important;
+            width: 90%;
+            cursor: default;
+            transform: none !important;
+        }
+
+        .traditional .items-container .card {
+            border-left-color: #3498db;
+        }
+
+        .generative .items-container .card {
+            border-left-color: #9b59b6;
+        }
+
+        /* 错误动画 */
+        .card.error {
+            background-color: #ffeaa7 !important;
+            border-left-color: #e74c3c !important;
+            color: #c0392b !important;
+            animation: shake 0.5s ease-in-out;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-10px); }
+            40%, 80% { transform: translateX(10px); }
+        }
+
+        /* 成功提示和中间按钮层 */
+        .success-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 40px 60px;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            text-align: center;
+            z-index: 50;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.5s;
+            border: 2px solid #2ecc71;
+        }
+
+        .success-overlay h2 {
+            color: #27ae60;
+            font-size: 36px;
+            margin-bottom: 20px;
+        }
+
+        /* 按钮通用样式 */
+        .btn {
+            padding: 12px 30px;
+            font-size: 20px;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: bold;
+            color: white;
+            transition: transform 0.2s, box-shadow 0.2s, filter 0.2s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            filter: brightness(1.1);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+        }
+
+        .btn:active {
+            transform: translateY(1px);
+        }
+
+        .btn-compare { background: linear-gradient(135deg, #f39c12, #e67e22); }
+        .btn-reset { background: linear-gradient(135deg, #7f8c8d, #95a5a6); }
+
+        /* 底部控制栏 */
+        .bottom-controls {
+            padding: 20px 50px 30px;
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            background-color: #ffffff;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+            z-index: 10;
+        }
+
+        /* 比较模式（靠拢动画） */
+        .workspace.compare-mode .center-area {
+            width: 0;
+            opacity: 0;
+            padding: 0;
+            border: none;
+            margin: 0;
+            pointer-events: none;
+        }
+
+        .workspace.compare-mode {
+            justify-content: center;
+            gap: 80px; /* 两个框比较时的间距 */
+        }
+
+        .workspace.compare-mode .drop-zone {
+            width: 35%; /* 靠拢后变宽一点，方便比较 */
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>探索人工智能的演进：拖拽分类挑战</h1>
+    </div>
+
+    <div class="workspace" id="workspace">
+        <!-- 左侧：传统人工智能 -->
+        <div class="drop-zone traditional" id="zone-traditional" data-type="traditional">
+            <div class="zone-title">传统人工智能<br><span style="font-size:16px;font-weight:normal;">(分析、预测、分类)</span></div>
+            <div class="items-container" id="container-traditional"></div>
+        </div>
+
+        <!-- 中间：散落区域 -->
+        <div class="center-area" id="center-area">
+            <!-- 卡片将由JS动态生成散落在这里 -->
+        </div>
+
+        <!-- 右侧：生成式人工智能 -->
+        <div class="drop-zone generative" id="zone-generative" data-type="generative">
+            <div class="zone-title">生成式人工智能<br><span style="font-size:16px;font-weight:normal;">(创造、合成、对话)</span></div>
+            <div class="items-container" id="container-generative"></div>
+        </div>
+    </div>
+
+    <!-- 成功完成提示 -->
+    <div class="success-overlay" id="success-overlay">
+        <h2>🎉 回答完全正确！</h2>
+        <p style="font-size:18px; margin-bottom: 25px; color:#555;">您已成功区分了传统AI和生成式AI的概念。</p>
+        <button class="btn btn-compare" onclick="activateCompareMode()">比较两者</button>
+    </div>
+
+    <!-- 底部控制按钮 -->
+    <div class="bottom-controls">
+        <button class="btn btn-reset" onclick="location.reload()">↺ 重置</button>
+        <button class="btn btn-compare" id="btn-bottom-compare" onclick="autoSolveAndCompare()">⇋ 一键完成并比较</button>
+    </div>
+
+    <script>
+        // 14个案例数据配置
+        const aiData = [
+            { id: "t1", text: "电子邮件垃圾邮件过滤", type: "traditional" },
+            { id: "t2", text: "AlphaGo 围棋博弈系统", type: "traditional" },
+            { id: "t3", text: "基于历史数据的房价预测", type: "traditional" },
+            { id: "t4", text: "银行信用评分风控系统", type: "traditional" },
+            { id: "t5", text: "X光医疗影像自动诊断", type: "traditional" },
+            { id: "t6", text: "手机指纹与人脸解锁功能", type: "traditional" },
+            { id: "t7", text: "电商平台的商品个性化推荐", type: "traditional" },
+            { id: "g1", text: "ChatGPT 撰写演讲稿", type: "generative" },
+            { id: "g2", text: "Midjourney 根据文字生成插画", type: "generative" },
+            { id: "g3", text: "GitHub Copilot 自动续写代码", type: "generative" },
+            { id: "g4", text: "AI 制作虚拟数字人播报视频", type: "generative" },
+            { id: "g5", text: "Suno 根据歌词直接生成音乐", type: "generative" },
+            { id: "g6", text: "大语言模型自动润色并翻译文章", type: "generative" },
+            { id: "g7", text: "根据2D线稿直接生成3D模型", type: "generative" }
+        ];
+
+        let correctCount = 0;
+        const totalItems = aiData.length;
+
+        const centerArea = document.getElementById('center-area');
+        const workspace = document.getElementById('workspace');
+        const successOverlay = document.getElementById('success-overlay');
+
+        // 初始化：打乱并散落卡片
+        function initCards() {
+            // 打乱数组顺序
+            const shuffledData = aiData.sort(() => Math.random() - 0.5);
+
+            // 获取中间区域的实际尺寸（为了计算随机位置）
+            // 注意：由于页面刚加载时可能还没完全渲染尺寸，我们稍微延迟或使用相对安全的百分比定位
+            
+            shuffledData.forEach((data, index) => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.id = data.id;
+                card.draggable = true;
+                card.dataset.type = data.type;
+                card.innerText = data.text;
+
+                // 随机分布逻辑 (避免过于贴近边缘，预留边界)
+                // 使用百分比定位，适配窗口缩放
+                const leftPos = 5 + Math.random() * 60; // 5% 到 65% (考虑到卡片本身宽度)
+                const topPos = 5 + Math.random() * 80;  // 5% 到 85%
+
+                card.style.left = leftPos + '%';
+                card.style.top = topPos + '%';
+
+                // 绑定拖拽事件
+                card.addEventListener('dragstart', handleDragStart);
+                card.addEventListener('dragend', handleDragEnd);
+
+                centerArea.appendChild(card);
+            });
+        }
+
+        // 拖拽事件处理函数
+        let draggedItem = null;
+
+        function handleDragStart(e) {
+            draggedItem = this;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', this.id);
+            setTimeout(() => this.style.opacity = '0.5', 0);
+        }
+
+        function handleDragEnd(e) {
+            this.style.opacity = '1';
+            draggedItem = null;
+        }
+
+        // 设置放置区域事件
+        const dropZones = document.querySelectorAll('.drop-zone');
+
+        dropZones.forEach(zone => {
+            zone.addEventListener('dragover', function(e) {
+                e.preventDefault(); // 允许放置
+                e.dataTransfer.dropEffect = 'move';
+                this.classList.add('drag-over');
+            });
+
+            zone.addEventListener('dragleave', function(e) {
+                this.classList.remove('drag-over');
+            });
+
+            zone.addEventListener('drop', function(e) {
+                e.preventDefault();
+                this.classList.remove('drag-over');
+
+                const itemId = e.dataTransfer.getData('text/plain');
+                const card = document.getElementById(itemId);
+                
+                if (!card) return;
+
+                const zoneType = this.dataset.type;
+                const cardType = card.dataset.type;
+
+                // 判断拖拽是否正确
+                if (zoneType === cardType) {
+                    // 正确：放入对应的容器中
+                    const container = this.querySelector('.items-container');
+                    container.appendChild(card);
+                    
+                    // 清除绝对定位，使其在flex/grid中自动排列
+                    card.style.position = 'relative';
+                    card.style.left = '0';
+                    card.style.top = '0';
+                    card.draggable = false; // 放置正确后不可再拖拽
+                    card.style.cursor = 'default';
+
+                    correctCount++;
+                    checkCompletion();
+                } else {
+                    // 错误：标红警示并回到原位
+                    card.classList.add('error');
+                    // 移除动画类以便下次可以重新触发
+                    setTimeout(() => {
+                        card.classList.remove('error');
+                    }, 600); 
+                }
+            });
+        });
+
+        // 检查是否全部完成
+        function checkCompletion() {
+            if (correctCount === totalItems) {
+                successOverlay.style.display = 'block';
+                // 确保有淡入效果
+                setTimeout(() => {
+                    successOverlay.style.opacity = '1';
+                }, 10);
+                document.getElementById('btn-bottom-compare').style.display = 'none'; // 隐藏底部的一键完成按钮
+            }
+        }
+
+        // 激活比较模式 (靠拢)
+        function activateCompareMode() {
+            successOverlay.style.opacity = '0';
+            setTimeout(() => {
+                successOverlay.style.display = 'none';
+                workspace.classList.add('compare-mode');
+            }, 300);
+        }
+
+        // 底部“比较”按钮：一键自动归位并比较
+        function autoSolveAndCompare() {
+            const remainingCards = centerArea.querySelectorAll('.card');
+            
+            // 自动归位动画模拟
+            remainingCards.forEach(card => {
+                const type = card.dataset.type;
+                const container = document.getElementById(`container-${type}`);
+                
+                container.appendChild(card);
+                card.style.position = 'relative';
+                card.style.left = '0';
+                card.style.top = '0';
+                card.draggable = false;
+                card.style.cursor = 'default';
+            });
+            
+            correctCount = totalItems;
+            document.getElementById('btn-bottom-compare').style.display = 'none';
+            activateCompareMode();
+        }
+
+        // 页面加载完成后初始化
+        window.onload = initCards;
+
+    </script>
+</body>
+</html>
