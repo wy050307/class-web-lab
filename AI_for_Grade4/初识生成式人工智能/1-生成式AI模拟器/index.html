@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 灵感织网：概率关联实验室 (国内云端版)</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts-wordcloud@2.1.0/dist/echarts-wordcloud.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hydrogen-js-sdk/dist/Bmob-2.5.2.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&display=swap');
+        body { font-family: 'Noto Sans SC', sans-serif; background: #0f172a; color: #f8fafc; overflow-x: hidden; }
+        .cyber-card { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(148, 163, 184, 0.2); }
+        .word-node { transition: all 0.2s; cursor: pointer; }
+        .word-node:hover { transform: scale(1.05); box-shadow: 0 0 15px rgba(56, 189, 248, 0.3); }
+        .list-enter-active, .list-leave-active { transition: all 0.5s ease; }
+        .list-enter-from, .list-leave-to { opacity: 0; transform: translateX(30px); }
+    </style>
+</head>
+<body>
+    <div id="app" class="min-h-screen p-4 md:p-8">
+        <div v-if="role === 'guest'" class="max-w-md mx-auto mt-20 text-center">
+            <h1 class="text-4xl font-bold mb-8 text-sky-400">灵感织网终端</h1>
+            <div class="cyber-card p-8 rounded-2xl shadow-2xl">
+                <input v-model="passcode" type="password" class="w-full bg-slate-900 border border-slate-700 p-4 rounded-lg mb-6 text-center text-2xl outline-none focus:border-sky-500" placeholder="身份密钥">
+                <button @click="verify" class="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold py-3 rounded-lg">接入系统</button>
+                <p class="mt-4 text-xs text-slate-500">学生端: 1234 | 教师端: 4096</p>
+            </div>
+        </div>
+
+        <div v-if="role === 'student'" class="max-w-4xl mx-auto">
+            <header class="flex justify-between items-center mb-8">
+                <span class="text-sky-400 font-bold flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-green-500 animate-ping"></span> 云连接已就绪
+                </span>
+                <button @click="logout" class="text-slate-500">退出</button>
+            </header>
+            <div class="cyber-card p-10 rounded-3xl text-center mb-8">
+                <h2 class="text-xl mb-6 text-slate-400">请选择一个词完成填充：</h2>
+                <div class="text-4xl md:text-6xl font-bold mb-10">雪花像 <span class="text-sky-400 underline decoration-4">{{ currentWord || '？' }}</span></div>
+                <div class="grid grid-cols-3 md:grid-cols-4 gap-4 mb-10">
+                    <div v-for="word in wordPool" :key="word" @click="currentWord = word"
+                         class="word-node p-4 rounded-xl" :class="currentWord === word ? 'bg-sky-600 text-white' : 'bg-slate-800 text-slate-300'">
+                        {{ word }}
+                    </div>
+                </div>
+                <button @click="submitData" :disabled="loading" class="w-full py-4 bg-sky-600 rounded-xl font-bold text-xl disabled:bg-slate-700">
+                    {{ loading ? '同步中...' : '发送灵感' }}
+                </button>
+            </div>
+        </div>
+
+        <div v-if="role === 'teacher'" class="h-full">
+            <header class="flex justify-between items-center mb-6">
+                <h1 class="text-2xl font-bold text-sky-400">神经网络看板 (实时数据源: Bmob)</h1>
+                <div class="flex gap-2">
+                    <button @click="clearDB" class="px-3 py-1 bg-red-900/20 text-red-400 border border-red-900/50 rounded text-sm">重置数据</button>
+                    <button @click="logout" class="px-3 py-1 bg-slate-800 rounded text-sm">退出</button>
+                </div>
+            </header>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-2 space-y-6">
+                    <div class="cyber-card p-6 rounded-2xl h-[400px]" id="wordcloud-chart"></div>
+                    <div class="cyber-card p-6 rounded-2xl">
+                        <h3 class="text-sky-400 mb-4 font-bold">词汇概率分布</h3>
+                        <div class="space-y-3">
+                            <div v-for="(item, index) in topWeights" :key="index" class="flex items-center gap-4">
+                                <span class="w-20 font-bold">{{item.name}}</span>
+                                <div class="flex-1 h-3 bg-slate-800 rounded-full overflow-hidden">
+                                    <div class="h-full bg-sky-500 transition-all duration-1000" :style="{width: item.percent + '%'}"></div>
+                                </div>
+                                <span class="w-12 text-right text-sky-400">{{item.percent}}%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="cyber-card p-6 rounded-2xl max-h-[700px] overflow-y-auto">
+                    <h3 class="text-sky-400 mb-4 font-bold border-b border-slate-700 pb-2">实时数据流</h3>
+                    <transition-group name="list" tag="div" class="space-y-2">
+                        <div v-for="log in dataLogs" :key="log.id" class="p-2 bg-slate-800/50 rounded text-sm flex justify-between">
+                            <span>雪花像 <b class="text-sky-400">{{log.word}}</b></span>
+                            <span class="text-slate-500 text-xs">{{log.time}}</span>
+                        </div>
+                    </transition-group>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ⚠️⚠️⚠️ 请在此处填入您在 Bmob 后端云获取的密钥 ⚠️⚠️⚠️
+        Bmob.initialize("你的Secret_Key", "你的Application_ID");
+
+        const { createApp, ref, computed, watch } = Vue;
+        createApp({
+            setup() {
+                const role = ref('guest');
+                const passcode = ref('');
+                const currentWord = ref('');
+                const dataLogs = ref([]);
+                const loading = ref(false);
+                const wordPool = ['羽毛', '棉絮', '精灵', '纸片', '花瓣', '大象', '梨花', '糖霜', '降落伞', '云朵', '繁星'];
+                let chart = null;
+                let poll = null;
+
+                const verify = () => {
+                    if (passcode.value === '1234') role.value = 'student';
+                    if (passcode.value === '4096') {
+                        role.value = 'teacher';
+                        setTimeout(() => {
+                            initChart();
+                            fetchData();
+                            poll = setInterval(fetchData, 3000); // 每3秒自动同步云端数据
+                        }, 100);
+                    }
+                };
+
+                const submitData = async () => {
+                    if (!currentWord.value) return;
+                    loading.value = true;
+                    try {
+                        const query = Bmob.Query('Words');
+                        query.set("word", currentWord.value);
+                        query.set("time", new Date().toLocaleTimeString());
+                        await query.save();
+                        alert('灵感已上传至神经网络！');
+                        currentWord.value = '';
+                    } catch (e) { alert('同步失败，请检查网络'); }
+                    loading.value = false;
+                };
+
+                const fetchData = async () => {
+                    try {
+                        const query = Bmob.Query('Words');
+                        query.limit(100);
+                        query.order("-createdAt");
+                        const res = await query.find();
+                        dataLogs.value = res.map(i => ({ id: i.objectId, word: i.word, time: i.time }));
+                    } catch (e) {}
+                };
+
+                const topWeights = computed(() => {
+                    if (!dataLogs.value.length) return [];
+                    const counts = {};
+                    dataLogs.value.forEach(l => counts[l.word] = (counts[l.word] || 0) + 1);
+                    return Object.entries(counts).map(([name, c]) => ({
+                        name, percent: (c / dataLogs.value.length * 100).toFixed(1)
+                    })).sort((a, b) => b.percent - a.percent).slice(0, 6);
+                });
+
+                const initChart = () => {
+                    chart = echarts.init(document.getElementById('wordcloud-chart'));
+                    updateChart();
+                };
+
+                const updateChart = () => {
+                    if (!chart) return;
+                    const counts = {};
+                    dataLogs.value.forEach(l => counts[l.word] = (counts[l.word] || 0) + 1);
+                    chart.setOption({
+                        series: [{
+                            type: 'wordCloud',
+                            sizeRange: [15, 60],
+                            textStyle: { color: () => `rgb(${Math.round(Math.random()*100+155)}, 200, 255)` },
+                            data: Object.entries(counts).map(([name, value]) => ({ name, value }))
+                        }]
+                    });
+                };
+
+                const clearDB = async () => {
+                    if (!confirm('确定清空所有数据吗？')) return;
+                    try {
+                        const query = Bmob.Query('Words');
+                        const res = await query.find();
+                        // 批量删除
+                        for (let item of res) {
+                            const q = Bmob.Query('Words');
+                            q.destroy(item.objectId);
+                        }
+                        dataLogs.value = [];
+                        updateChart();
+                    } catch (e) { alert('重置失败'); }
+                };
+
+                const logout = () => {
+                    role.value = 'guest';
+                    if (poll) clearInterval(poll);
+                };
+
+                watch(dataLogs, updateChart, { deep: true });
+
+                return { role, passcode, verify, wordPool, currentWord, submitData, dataLogs, topWeights, clearDB, logout, loading };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>教师控制台 - 灵感中枢</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts-wordcloud@2.1.0/dist/echarts-wordcloud.min.js"></script>
+    <script src="https://unpkg.com/convex@1.11.0/dist/browser.bundle.js"></script>
+    <style>
+        body { background: #020617; color: #f8fafc; font-family: sans-serif; overflow: hidden; }
+        .cyber-card { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(56, 189, 248, 0.2); }
+        [v-cloak] { display: none; }
+        /* 滚动条美化 */
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
+    </style>
+</head>
+<body class="h-screen p-6">
+
+    <div id="app" v-cloak class="h-full flex flex-col">
+        <div v-if="!isAuth" class="flex-1 flex items-center justify-center">
+            <div class="cyber-card p-10 rounded-3xl text-center w-full max-w-sm">
+                <h1 class="text-2xl font-bold mb-6 text-sky-400">管理中枢认证</h1>
+                <input v-model="passcode" type="password" placeholder="输入控制台密钥 (4096)" 
+                       class="w-full bg-slate-900 border border-slate-700 p-4 rounded-xl mb-4 text-center text-white outline-none focus:border-sky-500">
+                <button @click="verify" class="w-full bg-sky-600 p-4 rounded-xl font-bold hover:bg-sky-500 transition-all">开启大屏</button>
+            </div>
+        </div>
+
+        <template v-else>
+            <header class="flex justify-between items-center mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold text-sky-400">课堂实时语义模型</h2>
+                    <p class="text-slate-500 text-sm italic">后端驱动: Convex Realtime Engine</p>
+                </div>
+                <div class="flex gap-4">
+                    <button @click="clearAll" class="px-4 py-2 bg-red-900/20 text-red-400 border border-red-900/40 rounded-lg hover:bg-red-900/60 text-sm">清空全班数据</button>
+                    <button @click="isAuth = false" class="bg-slate-800 px-4 py-2 rounded-lg text-sm">退出</button>
+                </div>
+            </header>
+            
+            <div class="grid grid-cols-3 gap-6 flex-1 min-h-0">
+                <div class="col-span-2 cyber-card rounded-[2.5rem] relative overflow-hidden">
+                    <div id="chart-container" class="w-full h-full"></div>
+                    <div v-if="logs.length === 0" class="absolute inset-0 flex items-center justify-center text-slate-600">
+                        等待学生提交灵感语料...
+                    </div>
+                </div>
+
+                <div class="cyber-card p-6 rounded-[2.5rem] flex flex-col overflow-hidden">
+                    <h3 class="mb-4 text-sky-400 font-bold border-b border-slate-800 pb-2 flex justify-between">
+                        <span>实时采样流</span>
+                        <span class="text-xs text-slate-500">样本总数: {{ logs.length }}</span>
+                    </h3>
+                    <div class="overflow-y-auto flex-1 pr-2 space-y-3 custom-scroll">
+                        <transition-group name="list">
+                            <div v-for="log in sortedLogs" :key="log._id" class="p-3 bg-slate-800/40 rounded-xl border-l-4 border-sky-500">
+                                <div class="flex justify-between text-[10px] text-slate-500 mb-1">
+                                    <span>TOKEN: {{ log._id.slice(-4) }}</span>
+                                    <span>{{ log.time }}</span>
+                                </div>
+                                <div class="font-medium text-slate-200 text-base">雪花像 <span class="text-sky-400 font-bold">{{ log.word }}</span></div>
+                            </div>
+                        </transition-group>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted, nextTick, watch } = Vue;
+        const CONVEX_URL = "https://sensible-sockeye-877.convex.cloud";
+        const client = new Convex.ConvexClient(CONVEX_URL);
+
+        createApp({
+            setup() {
+                const isAuth = ref(false);
+                const passcode = ref('');
+                const logs = ref([]);
+                let myChart = null;
+
+                // 按照最新时间排序的流水
+                const sortedLogs = computed(() => {
+                    return [...logs.value].reverse();
+                });
+
+                const verify = () => {
+                    if (passcode.value === '4096') {
+                        isAuth.value = true;
+                        nextTick(() => {
+                            initChart();
+                            subscribeData();
+                        });
+                    } else alert('密钥错误');
+                };
+
+                const subscribeData = () => {
+                    // Convex 实时订阅：一旦 words 表变动，此回调立即触发
+                    client.onQuery("words:get", {}, (data) => {
+                        logs.value = data;
+                        refreshChart();
+                    });
+                };
+
+                const initChart = () => {
+                    const dom = document.getElementById('chart-container');
+                    if (dom) {
+                        myChart = echarts.init(dom);
+                        window.addEventListener('resize', () => myChart.resize());
+                    }
+                };
+
+                const refreshChart = () => {
+                    if (!myChart || logs.value.length === 0) return;
+                    
+                    // 统计词频
+                    const counts = {};
+                    logs.value.forEach(l => counts[l.word] = (counts[l.word] || 0) + 1);
+                    const chartData = Object.entries(counts).map(([name, value]) => ({ name, value }));
+
+                    myChart.setOption({
+                        series: [{
+                            type: 'wordCloud',
+                            shape: 'circle',
+                            gridSize: 15,
+                            sizeRange: [30, 110], // 大屏字体范围
+                            rotationRange: [-45, 90],
+                            textStyle: {
+                                color: () => `rgb(${Math.round(Math.random()*100+155)}, 200, 255)`
+                            },
+                            emphasis: { textStyle: { shadowBlur: 15, shadowColor: '#333' } },
+                            data: chartData
+                        }]
+                    });
+                };
+
+                const clearAll = async () => {
+                    if (confirm('确定要清空所有学生的数据吗？此操作无法恢复。')) {
+                        await client.mutation("words:clear");
+                    }
+                };
+
+                return { isAuth, passcode, verify, logs, sortedLogs, clearAll };
+            }
+        }).mount('#app');
+    </script>
+
+    <style>
+        /* 列表动画 */
+        .list-enter-active, .list-leave-active { transition: all 0.5s ease; }
+        .list-enter-from { opacity: 0; transform: translateX(30px); }
+    </style>
+</body>
+</html>
