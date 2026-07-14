@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>生成模型交互系统</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-blue: #0071e3;
+            --bg-gray: #f5f5f7;
+            --text-dark: #1d1d1f;
+            --danger-red: #ff3b30;
+            --white: #ffffff;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
+        body {
+            margin: 0; padding: 0;
+            font-family: 'Noto Sans SC', -apple-system, sans-serif;
+            background-color: var(--bg-gray);
+            color: var(--text-dark);
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh;
+        }
+
+        /* 模拟幻灯片尺寸的容器，确保 PAD 居中自适应 */
+        .slide-frame {
+            width: 100%;
+            max-width: 1024px;
+            background: var(--white);
+            padding: 40px;
+            border-radius: 24px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.06);
+            min-height: 700px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        h1 { 
+            text-align: center; 
+            font-size: 32px; 
+            font-weight: 700; 
+            margin-top: 0;
+            margin-bottom: 30px; 
+            letter-spacing: -0.5px;
+        }
+
+        /* ----- 输入视图 (建立模型) ----- */
+        #view-input { display: flex; flex-direction: column; flex-grow: 1; }
+
+        .toolbar {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .btn-group { display: flex; gap: 12px; }
+        
+        .btn {
+            padding: 12px 24px; border-radius: 12px; font-weight: 500;
+            cursor: pointer; border: none; transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            font-size: 16px;
+        }
+
+        .btn-primary { background: var(--primary-blue); color: var(--white); }
+        .btn-secondary { background: #e8e8ed; color: var(--text-dark); }
+        .btn-ghost { 
+            background: none; border: 1px dashed #d2d2d7; color: #86868b; font-size: 14px;
+            padding: 8px 16px;
+        }
+
+        .table-scroll {
+            flex-grow: 1;
+            overflow-y: auto;
+            border: 1px solid #d2d2d7;
+            border-radius: 16px;
+            margin-bottom: 30px;
+            background: #fafafa;
+        }
+
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            background: #f5f5f7; position: sticky; top: 0; z-index: 2;
+            padding: 16px; text-align: left; font-size: 14px; color: #86868b;
+            border-bottom: 1px solid #d2d2d7;
+        }
+        td { padding: 12px 16px; border-bottom: 1px solid #f2f2f7; background: #fff; }
+
+        input {
+            width: 100%; padding: 12px; border: 1px solid #d2d2d7;
+            border-radius: 8px; font-size: 16px; outline: none; transition: border-color 0.2s;
+        }
+        input:focus { border-color: var(--primary-blue); background: #fbfcfe; }
+
+        .build-footer {
+            display: flex; justify-content: center; position: relative;
+        }
+        .btn-large { 
+            padding: 20px 80px; font-size: 20px; border-radius: 18px; 
+            font-weight: 600; box-shadow: 0 10px 30px rgba(0,113,227,0.2);
+        }
+        .btn-clear-pos { position: absolute; right: 0; bottom: 0; }
+
+        /* ----- 批量弹出层 ----- */
+        .modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.4); backdrop-filter: blur(10px);
+            z-index: 1000; align-items: center; justify-content: center;
+        }
+        .modal-content {
+            background: white; width: 85%; max-width: 550px; padding: 32px;
+            border-radius: 28px; box-shadow: 0 30px 90px rgba(0,0,0,0.2);
+        }
+        textarea {
+            width: 100%; height: 250px; border: 1px solid #d2d2d7; border-radius: 14px;
+            padding: 16px; font-family: inherit; font-size: 15px; margin-top: 15px; margin-bottom: 20px;
+            background: #f9f9fb; outline: none;
+        }
+
+        /* ----- 转盘视图 (生成结果) ----- */
+        #view-wheel { display: none; flex-direction: column; align-items: center; flex-grow: 1; }
+        
+        .wheel-layout {
+            display: flex; flex-direction: column; align-items: center;
+            gap: 60px; margin: auto 0; width: 100%;
+        }
+        @media (min-width: 800px) { .wheel-layout { flex-direction: row; justify-content: space-around; } }
+
+        .wheel-outer { position: relative; width: 380px; height: 380px; }
+        .wheel-main {
+            width: 100%; height: 100%; border-radius: 50%; border: 8px solid #fff;
+            box-shadow: 0 15px 50px rgba(0,0,0,0.12); position: relative; overflow: hidden;
+        }
+        .wheel-label {
+            position: absolute; top: 50%; left: 50%; transform-origin: center;
+            font-size: 14px; color: #fff; font-weight: 700; text-shadow: 1px 1px 3px rgba(0,0,0,0.5);
+        }
+        .pointer-box {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            transition: transform 2s cubic-bezier(0.2, 0, 0.1, 1); z-index: 10;
+        }
+        .pointer-arrow {
+            position: absolute; top: -20px; left: 50%; transform: translateX(-50%);
+            width: 0; height: 0; border-left: 20px solid transparent;
+            border-right: 20px solid transparent; border-top: 50px solid var(--danger-red);
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.2));
+        }
+        .btn-center-spin {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 90px; height: 90px; border-radius: 50%; background: #fff;
+            border: 6px solid var(--primary-blue); color: var(--primary-blue);
+            font-weight: 800; z-index: 20; cursor: pointer; font-size: 18px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .result-display { font-size: 42px; font-weight: 500; color: #1d1d1f; }
+        .blank-underline {
+            display: inline-block; min-width: 160px; border-bottom: 4px solid #1d1d1f;
+            color: var(--danger-red); font-weight: 700; margin: 0 12px; text-align: center;
+        }
+        .btn-back { margin-top: 40px; background: #8e8e93; color: white; border: none; padding: 14px 40px; border-radius: 12px; }
+
+    </style>
+</head>
+<body>
+
+<div class="slide-frame">
+    <h1 id="page-title">建立模型</h1>
+
+    <div id="view-input">
+        <div class="toolbar">
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="toggleModal(true)">批量导入</button>
+                <button class="btn btn-secondary" onclick="addRow()">+ 添加一行</button>
+            </div>
+        </div>
+
+        <div class="table-scroll">
+            <table>
+                <thead>
+                    <tr><th>词语</th><th>出现频次</th><th style="width: 80px;"></th></tr>
+                </thead>
+                <tbody id="data-tbody"></tbody>
+            </table>
+        </div>
+
+        <div class="build-footer">
+            <button class="btn btn-primary btn-large" onclick="buildModel()">建立模型</button>
+            <button class="btn btn-ghost btn-clear-pos" onclick="clearAllData()">清空</button>
+        </div>
+    </div>
+
+    <div id="view-wheel">
+        <div class="wheel-layout">
+            <div class="wheel-outer">
+                <div id="wheel-main" class="wheel-main"></div>
+                <div id="pointer-box" class="pointer-box">
+                    <div class="pointer-arrow"></div>
+                </div>
+                <button id="spin-btn" class="btn-center-spin" onclick="runSpin()">生成</button>
+            </div>
+            <div class="result-display">
+                雪花像<span id="result-text" class="blank-underline"></span>。
+            </div>
+        </div>
+        <button class="btn-back" onclick="goBack()">重置</button>
+    </div>
+</div>
+
+<div id="import-modal" class="modal">
+    <div class="modal-content">
+        <h2 style="margin:0; font-size:20px;">批量添加数据</h2>
+        <p style="color:#86868b; font-size:14px; margin:8px 0;">每行输入一个词语和它的频次（用空格隔开）</p>
+        <textarea id="raw-input" placeholder="例如：&#10;梨花 15&#10;柳絮 14&#10;盐 3"></textarea>
+        <div style="display:flex; gap:12px; justify-content:flex-end;">
+            <button class="btn btn-secondary" onclick="toggleModal(false)">取消</button>
+            <button class="btn btn-primary" onclick="processBatchData()">确认导入</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let modelData = [];
+    let rotationDeg = 0;
+    const colorPalette = ['#007AFF', '#34C759', '#FF9500', '#AF52DE', '#FF2D55', '#5856D6', '#FFCC00', '#5AC8FA', '#FF3B30'];
+
+    // 初始化模拟数据
+    window.onload = () => {
+        const demo = [["梨花", 15], ["柳絮", 14], ["盐", 1], ["绒花", 1], ["羽毛", 1], ["棉花", 1]];
+        demo.forEach(d => addRow(d[0], d[1]));
+    };
+
+    function addRow(w = '', c = '') {
+        const body = document.getElementById('data-tbody');
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td><input type="text" class="cell-w" value="${w}" placeholder="词语"></td>
+            <td><input type="number" class="cell-c" value="${c}" placeholder="频次"></td>
+            <td style="text-align:center;"><button style="color:var(--danger-red); border:none; background:none; font-size:24px; cursor:pointer;" onclick="this.parentElement.parentElement.remove()">×</button></td>
+        `;
+        body.appendChild(row);
+        body.parentElement.scrollTop = body.parentElement.scrollHeight;
+    }
+
+    function clearAllData() {
+        document.getElementById('data-tbody').innerHTML = '';
+        addRow();
+    }
+
+    function toggleModal(s) {
+        document.getElementById('import-modal').style.display = s ? 'flex' : 'none';
+        if(s) document.getElementById('raw-input').value = '';
+    }
+
+    function processBatchData() {
+        const raw = document.getElementById('raw-input').value.trim();
+        if(!raw) return toggleModal(false);
+        const lines = raw.split('\n');
+        lines.forEach(l => {
+            const p = l.trim().split(/\s+/);
+            if(p.length >= 2) addRow(p[0], parseFloat(p[1]));
+        });
+        toggleModal(false);
+    }
+
+    function buildModel() {
+        const ws = document.querySelectorAll('.cell-w');
+        const cs = document.querySelectorAll('.cell-c');
+        modelData = [];
+        let total = 0;
+
+        ws.forEach((el, i) => {
+            const w = el.value.trim();
+            const c = parseFloat(cs[i].value);
+            if(w && !isNaN(c) && c > 0) {
+                modelData.push({ word: w, count: c });
+                total += c;
+            }
+        });
+
+        if(modelData.length < 1) return alert('请添加有效数据');
+
+        // 计算概率分布
+        modelData.forEach(item => item.prob = item.count / total);
+
+        // 切换标题和视图
+        document.getElementById('page-title').innerText = "生成结果";
+        document.getElementById('view-input').style.display = 'none';
+        document.getElementById('view-wheel').style.display = 'flex';
+        
+        drawWheel();
+    }
+
+    function drawWheel() {
+        const container = document.getElementById('wheel-main');
+        container.innerHTML = '';
+        let currentPerc = 0;
+        let conicStops = [];
+
+        modelData.forEach((item, i) => {
+            let start = currentPerc;
+            currentPerc += item.prob * 100;
+            let end = currentPerc;
+            let color = colorPalette[i % colorPalette.length];
+            conicStops.push(`${color} ${start}% ${end}%`);
+
+            // 计算中心角度
+            item.midAngle = ((start + end) / 2) * 3.6;
+
+            const label = document.createElement('div');
+            label.className = 'wheel-label';
+            label.innerText = item.word;
+            label.style.transform = `translate(-50%, -50%) rotate(${item.midAngle}deg) translateY(-120px)`;
+            container.appendChild(label);
+        });
+        container.style.background = `conic-gradient(${conicStops.join(',')})`;
+    }
+
+    function runSpin() {
+        const btn = document.getElementById('spin-btn');
+        const display = document.getElementById('result-text');
+        btn.disabled = true;
+        display.innerText = '';
+
+        // 基于随机概率选取词
+        let r = Math.random(), cum = 0, picked = modelData[0];
+        for (let item of modelData) {
+            cum += item.prob;
+            if (r <= cum) { picked = item; break; }
+        }
+
+        // 旋转动画：保持指针正对着选中的扇区
+        const extraSpins = 1800; // 转5圈
+        const target = rotationDeg + extraSpins + (picked.midAngle - (rotationDeg % 360));
+        rotationDeg = target;
+
+        document.getElementById('pointer-box').style.transform = `rotate(${target}deg)`;
+
+        setTimeout(() => {
+            display.innerText = picked.word;
+            btn.disabled = false;
+        }, 2000);
+    }
+
+    function goBack() {
+        document.getElementById('page-title').innerText = "建立模型";
+        document.getElementById('view-wheel').style.display = 'none';
+        document.getElementById('view-input').style.display = 'flex';
+        document.getElementById('pointer-box').style.transition = 'none';
+        document.getElementById('pointer-box').style.transform = 'rotate(0deg)';
+        rotationDeg = 0;
+        setTimeout(() => {
+            document.getElementById('pointer-box').style.transition = 'transform 2s cubic-bezier(0.2, 0, 0.1, 1)';
+        }, 50);
+    }
+</script>
+
+</body>
+</html>
